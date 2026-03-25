@@ -11,7 +11,12 @@
   "enabled",
   "email",
   "password",
-  "test_mode"
+  "test_mode",
+  "webhook_section",
+  "webhook_url",
+  "enable_webhook_signature",
+  "webhook_secret",
+  "allow_insecure_webhook_fallback"
  ],
  "fields": [
   {
@@ -38,6 +43,43 @@
    "fieldname": "test_mode",
    "fieldtype": "Check",
    "label": "Test Mode"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.enabled",
+   "fieldname": "webhook_section",
+   "fieldtype": "Section Break",
+   "label": "Webhook Settings"
+  },
+  {
+   "depends_on": "eval:doc.enabled",
+   "description": "Configure this URL in Shiprocket Dashboard > Settings > Webhooks.",
+   "fieldname": "webhook_url",
+   "fieldtype": "Small Text",
+   "label": "Webhook URL",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.enabled",
+   "description": "Recommended for production. Uses HMAC signature verification for incoming webhook requests.",
+   "fieldname": "enable_webhook_signature",
+   "fieldtype": "Check",
+   "label": "Verify Webhook Signature"
+  },
+  {
+   "depends_on": "eval:doc.enabled && doc.enable_webhook_signature",
+   "fieldname": "webhook_secret",
+   "fieldtype": "Password",
+   "label": "Webhook Secret"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enabled",
+   "description": "Only enable this temporarily when Shiprocket does not provide a webhook secret and you fully trust your network controls.",
+   "fieldname": "allow_insecure_webhook_fallback",
+   "fieldtype": "Check",
+   "label": "Allow Insecure Webhook Fallback"
   }
  ],
  "issingle": 1,

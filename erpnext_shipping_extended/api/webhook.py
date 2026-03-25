@@ -93,23 +93,29 @@ def shiprocket_webhook():
 def _verify_webhook_signature():
 	"""
 	Verify webhook signature (if Shiprocket provides one)
-	Falls back to IP whitelist if no signature
+	Falls back to IP whitelist only when explicitly allowed
 	"""
-	# Check if signature verification is enabled
 	settings = frappe.get_single("Shiprocket Settings")
-	webhook_secret = getattr(settings, "webhook_secret", None)
-	
+	webhook_secret = settings.get_password("webhook_secret") if getattr(settings, "webhook_secret", None) else None
+	signature_required = bool(getattr(settings, "enable_webhook_signature", 1))
+	allow_insecure_fallback = bool(getattr(settings, "allow_insecure_webhook_fallback", 0))
+
+	if signature_required and not webhook_secret:
+		frappe.logger().warning("Shiprocket webhook rejected because webhook signature verification is enabled but no secret is configured")
+		return False
+
+	if not signature_required:
+		return _verify_ip_whitelist() if allow_insecure_fallback else False
+
 	if not webhook_secret:
-		# No secret configured - verify by IP whitelist
-		return _verify_ip_whitelist()
+		return _verify_ip_whitelist() if allow_insecure_fallback else False
 	
-	# Get signature from headers
 	signature = frappe.get_request_header("X-Shiprocket-Signature") or \
 	            frappe.get_request_header("X-Webhook-Signature")
 	
 	if not signature:
 		frappe.logger().warning("Webhook signature missing in request")
-		return _verify_ip_whitelist()
+		return _verify_ip_whitelist() if allow_insecure_fallback else False
 	
 	# Get raw request body
 	raw_body = frappe.request.get_data(as_text=True)
@@ -132,14 +138,12 @@ def _verify_webhook_signature():
 def _verify_ip_whitelist():
 	"""
 	Verify request is from Shiprocket's IP range
-	Shiprocket IPs (update as needed): 
-	- Check Shiprocket docs for current IP ranges
+	Only intended as an explicitly enabled temporary fallback.
 	"""
 	client_ip = frappe.local.request_ip
 	
-	# Shiprocket IP ranges (example - verify with Shiprocket)
+	# Placeholder ranges for controlled environments only.
 	allowed_ips = [
-		"103.117.175.0/24",  # Example - update with real IPs
 		"127.0.0.1",  # Localhost for testing
 		"::1",  # IPv6 localhost
 	]
