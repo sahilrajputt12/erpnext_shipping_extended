@@ -73,6 +73,14 @@ def _create_custom_fields():
 				"hidden": 1,
 				"insert_after": "column_break_shiprocket",
 			},
+			{
+				"fieldname": "custom_return_against",
+				"label": "Return Against",
+				"fieldtype": "Link",
+				"options": "Shipment",
+				"read_only": 1,
+				"insert_after": "extended_provider_data",
+			},
 			# Payment related fields
 			{
 				"fieldname": "payment_section",

@@ -280,10 +280,11 @@ def create_return_shipment(shipment_name, return_reason):
 		return_shipment.shiprocket_order_id = str(result.get("return_order_id"))
 		return_shipment.shiprocket_shipment_id = str(result.get("return_shipment_id"))
 		
-		# Link to original shipment
-		return_shipment.shipment_type = "Return"
-		return_shipment.custom_return_against = shipment.name
-		
+		# ERPNext only accepts Goods/Documents here; keep return linkage in a custom field.
+		return_shipment.shipment_type = shipment.shipment_type if shipment.shipment_type in {"Goods", "Documents"} else "Goods"
+		if frappe.db.has_column("Shipment", "custom_return_against"):
+			return_shipment.custom_return_against = shipment.name
+
 		return_shipment.insert()
 		frappe.db.commit()
 		

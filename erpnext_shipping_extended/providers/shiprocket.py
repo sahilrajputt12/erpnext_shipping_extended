@@ -26,6 +26,34 @@ _token_cache: dict[str, _ShiprocketToken] = {}
 class ShiprocketProvider(BaseShippingProvider):
 	provider_name = "Shiprocket"
 
+	def _build_tracking_status_info(self, tracking_data: dict | None) -> str | None:
+		"""Keep Shipment.tracking_status_info short; store full payload in extended_provider_data."""
+		if not tracking_data:
+			return None
+
+		shipment_track = tracking_data.get("shipment_track")
+		if isinstance(shipment_track, list) and shipment_track:
+			latest = shipment_track[0] or {}
+			parts = [
+				latest.get("current_status") or latest.get("status"),
+				latest.get("current_timestamp") or latest.get("date"),
+				latest.get("location") or latest.get("city"),
+			]
+			summary = " | ".join(str(part).strip() for part in parts if part)
+			if summary:
+				return summary[:140]
+
+		parts = [
+			tracking_data.get("track_status"),
+			tracking_data.get("shipment_status"),
+			tracking_data.get("etd"),
+		]
+		summary = " | ".join(str(part).strip() for part in parts if part)
+		if summary:
+			return summary[:140]
+
+		return frappe.as_json(tracking_data)[:140]
+
 	def _get_settings(self):
 		if not frappe.db.exists("DocType", "Shiprocket Settings"):
 			return None
@@ -55,6 +83,7 @@ class ShiprocketProvider(BaseShippingProvider):
 				return
 
 		payload = {"email": settings.email, "password": settings.get_password("password")}
+		response = None
 		try:
 			response = requests.post(
 				url=f"{self._get_base_url()}/auth/login",
@@ -65,7 +94,27 @@ class ShiprocketProvider(BaseShippingProvider):
 			response.raise_for_status()
 			resp = response.json()
 		except Exception:
-			frappe.log_error(title="Shiprocket Authentication Failed")
+			error_detail = None
+			try:
+				error_detail = (response.json() or {}).get("message")
+			except Exception:
+				error_detail = getattr(response, "text", None)
+			try:
+				frappe.log_error(
+					message=frappe.as_json(
+						{
+							"url": f"{self._get_base_url()}/auth/login",
+							"status_code": getattr(response, "status_code", None),
+							"response_text": getattr(response, "text", None),
+							"message": error_detail,
+						}
+					),
+					title="Shiprocket Authentication Failed",
+				)
+			except Exception:
+				frappe.log_error(title="Shiprocket Authentication Failed")
+			if error_detail:
+				raise frappe.ValidationError(_("Shiprocket authentication failed: {0}").format(error_detail))
 			raise frappe.ValidationError(_("Shiprocket authentication failed. Please verify credentials."))
 
 		token = (resp or {}).get("token")
@@ -82,6 +131,10 @@ class ShiprocketProvider(BaseShippingProvider):
 			token = _token_cache[frappe.local.site].token
 		return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
+	def _clear_cached_token(self) -> None:
+		with _token_lock:
+			_token_cache.pop(frappe.local.site, None)
+
 	def fetch_shipping_rates(self, *, shipment_doc, **kwargs) -> list[dict]:
 		if not self._is_enabled():
 			return []
@@ -92,6 +145,7 @@ class ShiprocketProvider(BaseShippingProvider):
 			frappe.log_error(title="Shiprocket Rate Mapping Failed")
 			return []
 
+		response = None
 		try:
 			response = requests.get(
 				url=f"{self._get_base_url()}/courier/serviceability/",
@@ -99,10 +153,31 @@ class ShiprocketProvider(BaseShippingProvider):
 				headers=self._get_auth_headers(),
 				timeout=30,
 			)
+			if response.status_code == 401:
+				self._clear_cached_token()
+				response = requests.get(
+					url=f"{self._get_base_url()}/courier/serviceability/",
+					params=payload,
+					headers=self._get_auth_headers(),
+					timeout=30,
+				)
 			response.raise_for_status()
 			resp = response.json()
 		except Exception:
-			frappe.log_error(title="Shiprocket Rate Fetch Failed")
+			try:
+				frappe.log_error(
+					message=frappe.as_json(
+						{
+							"url": f"{self._get_base_url()}/courier/serviceability/",
+							"payload": payload,
+							"status_code": getattr(response, "status_code", None),
+							"response_text": getattr(response, "text", None),
+						}
+					),
+					title="Shiprocket Rate Fetch Failed",
+				)
+			except Exception:
+				frappe.log_error(title="Shiprocket Rate Fetch Failed")
 			return []
 
 		couriers = ((resp or {}).get("data") or {}).get("available_courier_companies") or []
@@ -455,12 +530,11 @@ class ShiprocketProvider(BaseShippingProvider):
 
 		data = (resp or {}).get("tracking_data") or {}
 		track = data.get("track_status")
-		track_info = data.get("track_status")
 		track_url = data.get("shipment_track") or ""
 		return {
 			"awb_number": awb,
 			"tracking_status": str(track) if track is not None else None,
-			"tracking_status_info": frappe.as_json(data) if data else None,
+			"tracking_status_info": self._build_tracking_status_info(data),
 			"tracking_url": track_url if isinstance(track_url, str) else frappe.as_json(track_url),
 			"extended_provider_data": {"shiprocket": resp},
 		}

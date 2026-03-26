@@ -49,7 +49,7 @@ frappe.ui.form.on('Shipment', {
 		}
 
 		// 2. NDR ACTIONS (if shipment has NDR status)
-		if (frm.doc.tracking_status && frm.doc.tracking_status.includes('NDR')) {
+		if (frm.doc.tracking_status && frm.doc.tracking_status.toLowerCase().includes('ndr')) {
 			frm.add_custom_button(__('Re-attempt Delivery'), function() {
 				frappe.prompt([
 					{
@@ -223,7 +223,7 @@ frappe.ui.form.on('Shipment', {
 		if (frm.doc.shiprocket_order_id && !frm.doc.awb_number) {
 			frm.add_custom_button(__('Sync AWB'), function() {
 				frappe.call({
-					method: 'erpnext_shipping_extended.api.webhook.sync_awb_manually',
+					method: 'erpnext_shipping_extended.api.awb_sync.sync_awb_manually',
 					args: {
 						shipment_name: frm.doc.name
 					},

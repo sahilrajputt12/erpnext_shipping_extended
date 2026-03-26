@@ -5,3 +5,4 @@
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
 erpnext_shipping_extended.patches.v1_0.add_custom_fields
+erpnext_shipping_extended.patches.v1_1.add_return_link_field

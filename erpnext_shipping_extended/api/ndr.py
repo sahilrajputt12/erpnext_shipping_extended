@@ -21,11 +21,11 @@ class ShiprocketNDRManager:
 	def get_ndr_list(self, **kwargs):
 		"""
 		Get list of shipments with failed delivery attempts
-		API: GET /courier/ndr
+		API: GET /orders/processing/ndr
 		"""
 		try:
 			response = requests.get(
-				url=f"{self.base_url}/courier/ndr",
+				url=f"{self.base_url}/orders/processing/ndr",
 				headers=self.auth_headers,
 				params=kwargs,
 				timeout=30
@@ -48,7 +48,7 @@ class ShiprocketNDRManager:
 	def take_ndr_action(self, *, awb, action, **kwargs):
 		"""
 		Take action on NDR shipment
-		API: POST /courier/ndr/action
+		API: POST /orders/ndr/action
 		
 		Actions:
 		- re-attempt: Schedule re-delivery
@@ -77,7 +77,7 @@ class ShiprocketNDRManager:
 		
 		try:
 			response = requests.post(
-				url=f"{self.base_url}/courier/ndr/action",
+				url=f"{self.base_url}/orders/ndr/action",
 				json=payload,
 				headers=self.auth_headers,
 				timeout=30
@@ -85,7 +85,7 @@ class ShiprocketNDRManager:
 			response.raise_for_status()
 			result = response.json()
 			
-			if result.get("success"):
+			if result.get("success") or str(result.get("status")).lower() == "success":
 				action_text = {
 					"re-attempt": "Re-delivery scheduled",
 					"rto": "Marked for RTO",
