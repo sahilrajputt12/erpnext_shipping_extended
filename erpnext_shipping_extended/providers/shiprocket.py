@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import base64
 import json
 import threading
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import frappe
 from frappe import _
 import requests
+from frappe.utils import get_datetime, now_datetime
 
 from .base_provider import BaseShippingProvider
 
@@ -17,14 +20,144 @@ SHIPROCKET_API_BASE_URL = "https://apiv2.shiprocket.in/v1/external"
 @dataclass(frozen=True)
 class _ShiprocketToken:
 	token: str
+	expires_at: str | None = None
 
 
 _token_lock = threading.Lock()
 _token_cache: dict[str, _ShiprocketToken] = {}
 
 
+def _decode_jwt_expiry(token: str) -> str | None:
+	parts = (token or "").split(".")
+	if len(parts) != 3:
+		return None
+
+	try:
+		payload = parts[1]
+		padding = "=" * (-len(payload) % 4)
+		decoded = base64.urlsafe_b64decode(payload + padding)
+		data = json.loads(decoded.decode("utf-8"))
+	except Exception:
+		return None
+
+	exp = data.get("exp")
+	if not exp:
+		return None
+
+	try:
+		return datetime.fromtimestamp(int(exp), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+	except Exception:
+		return None
+
+
+def get_cached_shiprocket_auth_status() -> dict[str, str | None]:
+	cached = _token_cache.get(frappe.local.site)
+	if not cached:
+		return {"bearer_token": None, "token_expiry": None}
+
+	return {
+		"bearer_token": cached.token,
+		"token_expiry": cached.expires_at,
+	}
+
+
 class ShiprocketProvider(BaseShippingProvider):
 	provider_name = "Shiprocket"
+
+	def _fetch_order_details(self, order_id: str | int | None) -> dict | None:
+		"""Fetch Shiprocket order details so we can reconcile local status with remote state."""
+		if not order_id:
+			return None
+
+		url = f"{self._get_base_url()}/orders/show/{order_id}"
+		response = None
+		try:
+			response = requests.get(url, headers=self._get_auth_headers(), timeout=30)
+			response.raise_for_status()
+			result = response.json() or {}
+			return result.get("data") or {}
+		except Exception:
+			frappe.log_error(
+				message=frappe.as_json(
+					{
+						"order_id": order_id,
+						"url": url,
+						"status_code": getattr(response, "status_code", None),
+						"response_text": getattr(response, "text", None),
+					}
+				),
+				title="Shiprocket Order Lookup Failed",
+			)
+			return None
+
+	def _extract_remote_order_status(self, order_data: dict | None) -> str:
+		status = (
+			(order_data or {}).get("status")
+			or (order_data or {}).get("status_code")
+			or (order_data or {}).get("shipment_status")
+			or ""
+		)
+		return str(status).strip()
+
+	def _sync_remote_order_state(self, shipment_doc, order_data: dict | None, *, context: str) -> str | None:
+		"""Mirror important Shiprocket order state back to ERPNext when we discover it late."""
+		if not order_data:
+			return None
+
+		remote_status = self._extract_remote_order_status(order_data)
+		if not remote_status:
+			return None
+
+		update_data = {}
+		status_lower = remote_status.lower()
+		if "cancel" in status_lower:
+			update_data["status"] = "Cancelled"
+		elif remote_status and not shipment_doc.get("tracking_status"):
+			update_data["tracking_status"] = remote_status
+
+		summary = f"Shiprocket order status: {remote_status}"
+		if context:
+			summary = f"{summary} ({context})"
+		update_data["tracking_status_info"] = summary[:140]
+
+		try:
+			extended_data = json.loads(shipment_doc.extended_provider_data or "{}")
+		except Exception:
+			extended_data = {}
+		extended_data.setdefault("shiprocket", {})
+		extended_data["shiprocket"]["last_known_order"] = order_data
+		update_data["extended_provider_data"] = frappe.as_json(extended_data)
+
+		try:
+			shipment_doc.db_set(update_data)
+			shipment_doc.reload()
+		except Exception:
+			frappe.log_error(
+				message=frappe.as_json(
+					{
+						"shipment": getattr(shipment_doc, "name", None),
+						"order_id": shipment_doc.get("shiprocket_order_id"),
+						"remote_status": remote_status,
+						"context": context,
+					}
+				),
+				title="Shiprocket Order State Sync Failed",
+			)
+
+		return remote_status
+
+	def _get_pickup_address_name(self, shipment_doc) -> str:
+		"""Prefer custom pickup field when present, else fall back to core Shipment field."""
+		pickup_address_name = shipment_doc.get("pickup_from_address") or shipment_doc.get("pickup_address_name")
+		if not pickup_address_name:
+			frappe.throw(
+				_("Please select a Pickup From Address in the Shipment."),
+				title=_("Missing Pickup Address"),
+			)
+		return pickup_address_name
+
+	def _get_pickup_address(self, shipment_doc):
+		return frappe.get_doc("Address", self._get_pickup_address_name(shipment_doc))
 
 	def _build_tracking_status_info(self, tracking_data: dict | None) -> str | None:
 		"""Keep Shipment.tracking_status_info short; store full payload in extended_provider_data."""
@@ -79,7 +212,8 @@ class ShiprocketProvider(BaseShippingProvider):
 
 		site_key = frappe.local.site
 		with _token_lock:
-			if site_key in _token_cache:
+			cached = _token_cache.get(site_key)
+			if cached and (not cached.expires_at or get_datetime(cached.expires_at) > now_datetime()):
 				return
 
 		payload = {"email": settings.email, "password": settings.get_password("password")}
@@ -122,8 +256,9 @@ class ShiprocketProvider(BaseShippingProvider):
 			frappe.log_error(message=frappe.as_json(resp), title="Shiprocket Authentication Failed")
 			raise frappe.ValidationError(_("Shiprocket authentication failed. Please verify credentials."))
 
+		expires_at = _decode_jwt_expiry(token)
 		with _token_lock:
-			_token_cache[site_key] = _ShiprocketToken(token=token)
+			_token_cache[site_key] = _ShiprocketToken(token=token, expires_at=expires_at)
 
 	def _get_auth_headers(self) -> dict[str, str]:
 		self.authenticate()
@@ -259,11 +394,24 @@ class ShiprocketProvider(BaseShippingProvider):
 			raise frappe.ValidationError(_("Shiprocket shipment creation failed. Please check Error Log."))
 
 		# CRITICAL: Generate AWB if not automatically assigned
+		order_status = None
 		if not awb and shipment_id:
 			frappe.msgprint(_("Order created. Generating AWB..."))
-			awb = self._generate_awb(shipment_id, service_info)
+			awb, order_status = self._generate_awb(shipment_id, service_info, order_id=order_id)
 			if not awb:
-				frappe.msgprint(_("⚠️ AWB generation pending. You can sync it later using 'Sync AWB' button."), alert=True)
+				if "cancel" in str(order_status or "").lower():
+					frappe.msgprint(
+						_(
+							"Shiprocket has this order in cancelled state, so AWB generation cannot continue. "
+							"The ERPNext shipment will be marked Cancelled."
+						),
+						alert=True,
+					)
+				else:
+					frappe.msgprint(
+						_("⚠️ AWB generation pending. You can sync it later using 'Sync AWB' button."),
+						alert=True,
+					)
 
 		return {
 			"service_provider": self.provider_name,
@@ -272,12 +420,13 @@ class ShiprocketProvider(BaseShippingProvider):
 			"shipment_id": str(shipment_id),
 			"shipment_amount": service_info.get("total_price"),
 			"awb_number": awb or "",
+			"status": "Cancelled" if "cancel" in str(order_status or "").lower() else "Booked",
 			"shiprocket_order_id": str(order_id),
 			"shiprocket_shipment_id": str(shipment_id),
 			"extended_provider_data": {"shiprocket": resp},
 		}
 
-	def _generate_awb(self, shipment_id, service_info):
+	def _generate_awb(self, shipment_id, service_info, *, order_id=None):
 		"""
 		Generate AWB for a shipment
 		API: POST /courier/assign/awb
@@ -287,7 +436,7 @@ class ShiprocketProvider(BaseShippingProvider):
 			
 			if not courier_id:
 				frappe.logger().warning(f"No courier_company_id found for shipment {shipment_id}")
-				return None
+				return None, None
 			
 			payload = {
 				"shipment_id": int(shipment_id),
@@ -309,14 +458,14 @@ class ShiprocketProvider(BaseShippingProvider):
 				awb_code = result.get("response", {}).get("data", {}).get("awb_code")
 				if awb_code:
 					frappe.msgprint(_("✓ AWB Generated: {0}").format(awb_code), alert=True, indicator="green")
-					return awb_code
+					return awb_code, None
 			
 			# Log if AWB not generated
 			frappe.log_error(
 				message=frappe.as_json(result, indent=2),
 				title="Shiprocket AWB Generation Response"
 			)
-			return None
+			return None, None
 			
 		except requests.exceptions.HTTPError as e:
 			error_detail = ""
@@ -325,18 +474,29 @@ class ShiprocketProvider(BaseShippingProvider):
 				error_detail = error_resp.get("message", str(error_resp))
 			except:
 				error_detail = e.response.text
+
+			order_status = None
+			if "cancel" in (error_detail or "").lower() and order_id:
+				order_data = self._fetch_order_details(order_id)
+				order_status = self._extract_remote_order_status(order_data)
 			
 			frappe.log_error(
-				message=f"Shipment ID: {shipment_id}\nCourier ID: {courier_id}\nError: {error_detail}",
+				message=(
+					f"Shipment ID: {shipment_id}\n"
+					f"Courier ID: {courier_id}\n"
+					f"Order ID: {order_id}\n"
+					f"Order Status: {order_status}\n"
+					f"Error: {error_detail}"
+				),
 				title="Shiprocket AWB Generation Failed"
 			)
-			return None
+			return None, order_status
 		except Exception as e:
 			frappe.log_error(
 				message=f"Shipment ID: {shipment_id}\nError: {str(e)}",
 				title="Shiprocket AWB Generation Error"
 			)
-			return None
+			return None, None
 
 	def _validate_shipment_data(self, shipment_doc):
 		"""Validate all required fields before creating shipment"""
@@ -344,7 +504,7 @@ class ShiprocketProvider(BaseShippingProvider):
 		
 		# Get addresses
 		try:
-			pickup = frappe.get_doc("Address", shipment_doc.pickup_address_name)
+			pickup = self._get_pickup_address(shipment_doc)
 			delivery = frappe.get_doc("Address", shipment_doc.delivery_address_name)
 		except:
 			frappe.throw(_("Unable to fetch pickup or delivery address"))
@@ -420,15 +580,14 @@ class ShiprocketProvider(BaseShippingProvider):
 			frappe.msgprint(_("Shiprocket Order ID not found. Cannot sync AWB."))
 			return None
 		
+		response = None
 		try:
-			url = f"{self._get_base_url()}/orders/show/{order_id}"
-			response = requests.get(url, headers=self._get_auth_headers(), timeout=30)
-			response.raise_for_status()
-			result = response.json()
-			
-			order_data = result.get("data", {})
+			order_data = self._fetch_order_details(order_id) or {}
 			awb = order_data.get("awb_code")
-			shipment_id = order_data.get("shipments", [{}])[0].get("id") if order_data.get("shipments") else None
+			shipments = order_data.get("shipments")
+			shipment_id = None
+			if isinstance(shipments, list) and shipments:
+				shipment_id = (shipments[0] or {}).get("id")
 			
 			if awb:
 				shipment_doc.awb_number = awb
@@ -439,11 +598,36 @@ class ShiprocketProvider(BaseShippingProvider):
 				frappe.msgprint(_("AWB synced from Shiprocket: {0}").format(awb))
 				return awb
 			else:
-				status = order_data.get("status", "Unknown")
-				frappe.msgprint(_("AWB not yet assigned by courier. Current status: {0}. Please wait and try again.").format(status))
+				status = self._sync_remote_order_state(
+					shipment_doc, order_data, context="during AWB sync"
+				) or order_data.get("status", "Unknown")
+				if "cancel" in str(status).lower():
+					frappe.msgprint(
+						_(
+							"Shiprocket order is in cancelled state, so AWB cannot be assigned. "
+							"ERPNext shipment status has been updated."
+						)
+					)
+				else:
+					frappe.msgprint(
+						_(
+							"AWB not yet assigned by courier. Current status: {0}. Please wait and try again."
+						).format(status)
+					)
 				return None
 		except Exception as e:
-			frappe.log_error(message=str(e), title="Shiprocket AWB Sync Failed")
+			frappe.log_error(
+				message=frappe.as_json(
+					{
+						"shipment": getattr(shipment_doc, "name", None),
+						"order_id": order_id,
+						"status_code": getattr(response, "status_code", None),
+						"response_text": getattr(response, "text", None),
+						"error": str(e),
+					}
+				),
+				title="Shiprocket AWB Sync Failed",
+			)
 			frappe.msgprint(_("Unable to sync AWB from Shiprocket. Please try again later."))
 			return None
 
@@ -594,7 +778,7 @@ class ShiprocketProvider(BaseShippingProvider):
 			return None
 
 	def _build_serviceability_payload(self, shipment_doc) -> dict:
-		pickup = frappe.get_doc("Address", shipment_doc.pickup_address_name)
+		pickup = self._get_pickup_address(shipment_doc)
 		delivery = frappe.get_doc("Address", shipment_doc.delivery_address_name)
 
 		parcels = shipment_doc.shipment_parcel or []
@@ -659,7 +843,7 @@ class ShiprocketProvider(BaseShippingProvider):
 		return email or "", phone or ""
 
 	def _build_create_order_payload(self, shipment_doc, service_info: dict) -> dict:
-		pickup = frappe.get_doc("Address", shipment_doc.pickup_address_name)
+		pickup = self._get_pickup_address(shipment_doc)
 		delivery = frappe.get_doc("Address", shipment_doc.delivery_address_name)
 
 		# Get contact details (already validated in _validate_shipment_data)

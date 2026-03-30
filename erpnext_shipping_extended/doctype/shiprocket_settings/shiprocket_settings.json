@@ -12,10 +12,15 @@
   "email",
   "password",
   "test_mode",
+  "auth_section",
+  "bearer_token",
+  "token_expiry",
   "webhook_section",
   "webhook_url",
   "enable_webhook_signature",
   "webhook_secret",
+  "enable_webhook_api_key",
+  "webhook_api_key",
   "allow_insecure_webhook_fallback"
  ],
  "fields": [
@@ -47,6 +52,27 @@
   {
    "collapsible": 1,
    "depends_on": "eval:doc.enabled",
+   "fieldname": "auth_section",
+   "fieldtype": "Section Break",
+   "label": "Authentication Status"
+  },
+  {
+   "depends_on": "eval:doc.enabled",
+   "fieldname": "bearer_token",
+   "fieldtype": "Small Text",
+   "label": "Bearer Token",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.enabled",
+   "fieldname": "token_expiry",
+   "fieldtype": "Datetime",
+   "label": "Token Expiry",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.enabled",
    "fieldname": "webhook_section",
    "fieldtype": "Section Break",
    "label": "Webhook Settings"
@@ -72,6 +98,20 @@
    "fieldname": "webhook_secret",
    "fieldtype": "Password",
    "label": "Webhook Secret"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enabled",
+   "description": "If enabled, incoming webhook requests must include x-api-key header matching Webhook API Key.",
+   "fieldname": "enable_webhook_api_key",
+   "fieldtype": "Check",
+   "label": "Require Webhook API Key"
+  },
+  {
+   "depends_on": "eval:doc.enabled && doc.enable_webhook_api_key",
+   "fieldname": "webhook_api_key",
+   "fieldtype": "Password",
+   "label": "Webhook API Key"
   },
   {
    "default": "0",

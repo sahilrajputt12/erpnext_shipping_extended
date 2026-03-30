@@ -15,7 +15,7 @@ Webhook Events:
 
 Setup Instructions:
 1. Go to Shiprocket Dashboard > Settings > Webhooks
-2. Add Webhook URL: https://your-site.com/api/method/erpnext_shipping_extended.api.webhook.shiprocket_webhook
+2. Add Webhook URL: https://your-site.com/api/method/erpnext_shipping_extended.api.webhook.tracking_webhook
 3. Enable events you want to track
 4. Copy Webhook Secret (if provided by Shiprocket)
 5. Add secret to Shiprocket Settings doctype (needs custom field)
@@ -55,6 +55,9 @@ def shiprocket_webhook():
 	Authenticated via signature verification or IP whitelist
 	"""
 	try:
+		# NOTE:
+		# Shiprocket portal may reject webhook URLs containing certain keywords.
+		# Prefer using the alias endpoint `tracking_webhook` and keep this for backward compatibility.
 		# Health-check endpoint (Option A): allow GET to verify route is active
 		if getattr(frappe.local, "request", None) and frappe.local.request.method == "GET":
 			return {"status": "ok", "message": "Shiprocket webhook endpoint is active"}
@@ -73,7 +76,7 @@ def shiprocket_webhook():
 		# Temporary bypass for testing - remove in production
 		if frappe.conf.get("developer_mode") or frappe.local.request_ip in ["127.0.0.1", "::1"]:
 			frappe.logger().info("Webhook bypassed for local testing")
-		elif not _verify_webhook_signature():
+		elif not _verify_webhook_signature_or_token():
 			frappe.log_error(
 				message="Signature verification failed",
 				title="Shiprocket Webhook: Unauthorized"
@@ -113,15 +116,29 @@ def shiprocket_webhook():
 		return {"status": "error", "message": str(e)}
 
 
-def _verify_webhook_signature():
+@frappe.whitelist(allow_guest=True)
+def tracking_webhook():
+	"""Alias webhook endpoint with a neutral name to satisfy Shiprocket URL restrictions."""
+	return shiprocket_webhook()
+
+
+def _verify_webhook_signature_or_token():
 	"""
 	Verify webhook signature (if Shiprocket provides one)
 	Falls back to IP whitelist only when explicitly allowed
 	"""
 	settings = frappe.get_single("Shiprocket Settings")
 	webhook_secret = settings.get_password("webhook_secret") if getattr(settings, "webhook_secret", None) else None
+	api_key = settings.get_password("webhook_api_key") if getattr(settings, "webhook_api_key", None) else None
 	signature_required = bool(getattr(settings, "enable_webhook_signature", 1))
 	allow_insecure_fallback = bool(getattr(settings, "allow_insecure_webhook_fallback", 0))
+	allow_api_key_auth = bool(getattr(settings, "enable_webhook_api_key", 0))
+
+	# Optionally accept x-api-key as a simple shared-secret auth.
+	if allow_api_key_auth and api_key:
+		received_key = frappe.get_request_header("x-api-key") or frappe.get_request_header("X-Api-Key")
+		if received_key and hmac.compare_digest(str(received_key), str(api_key)):
+			return True
 
 	if signature_required and not webhook_secret:
 		frappe.logger().warning("Shiprocket webhook rejected because webhook signature verification is enabled but no secret is configured")

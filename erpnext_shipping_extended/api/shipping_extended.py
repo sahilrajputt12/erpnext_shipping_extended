@@ -189,7 +189,7 @@ def create_shipment(
 				"shiprocket_shipment_id": shipment_info.get("shiprocket_shipment_id"),
 				"shiprocket_order_id": shipment_info.get("shiprocket_order_id"),
 				"extended_provider_data": frappe.as_json(shipment_info.get("extended_provider_data") or {}),
-				"status": "Booked",
+				"status": shipment_info.get("status") or "Booked",
 			}
 		)
 	except Exception:
@@ -298,4 +298,3 @@ def on_shipment_cancel(doc, method):
 			alert=True,
 			indicator='red'
 		)
-

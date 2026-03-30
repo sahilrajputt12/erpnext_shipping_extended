@@ -5,6 +5,15 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import get_url
 
+from erpnext_shipping_extended.providers.shiprocket import (
+	ShiprocketProvider,
+	get_cached_shiprocket_auth_status,
+)
+
+
+def build_shiprocket_webhook_url() -> str:
+	return f"{get_url()}/api/method/erpnext_shipping_extended.api.webhook.tracking_webhook"
+
 
 class ShiprocketSettings(Document):
 	def validate(self):
@@ -16,13 +25,24 @@ class ShiprocketSettings(Document):
 			if self.enable_webhook_signature and not self.get_password("webhook_secret"):
 				frappe.throw(_("Webhook Secret is required when webhook signature verification is enabled"))
 
-		self.webhook_url = self.get_webhook_url()
+		self.webhook_url = build_shiprocket_webhook_url()
 
 	def get_webhook_url(self) -> str:
-		return f"{get_url()}/api/method/erpnext_shipping_extended.api.webhook.shiprocket_webhook"
+		return build_shiprocket_webhook_url()
 
 
 @frappe.whitelist()
 def get_shiprocket_webhook_url() -> str:
+	return build_shiprocket_webhook_url()
+
+
+@frappe.whitelist()
+def get_shiprocket_auth_status() -> dict[str, str | None]:
 	settings = frappe.get_single("Shiprocket Settings")
-	return settings.get_webhook_url()
+	if settings.enabled and settings.email and settings.password:
+		try:
+			ShiprocketProvider().authenticate()
+		except Exception:
+			pass
+
+	return get_cached_shiprocket_auth_status()

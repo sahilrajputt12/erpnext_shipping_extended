@@ -46,7 +46,8 @@ app_license = "unlicense"
 # NOTE: This app doesn't need extra Shipment JS; avoid overriding core `erpnext_shipping` behavior.
 # doctype_js = {"doctype" : "public/js/doctype.js"}
 doctype_js = {
-    "Shipment": "public/js/shipment_extended.js"
+    "Shipment": "public/js/shipment_extended.js",
+    "Shiprocket Settings": "doctype/shiprocket_settings/shiprocket_settings.js",
 }
 doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -143,6 +144,8 @@ after_install = "erpnext_shipping_extended.install.after_install"
 
 doc_events = {
 	"Shipment": {
+		"validate": "erpnext_shipping_extended.utils.validate_shiprocket_shipment",
+		"before_submit": "erpnext_shipping_extended.utils.validate_shiprocket_shipment",
 		"on_cancel": "erpnext_shipping_extended.api.shipping_extended.on_shipment_cancel",
 	}
 }
@@ -244,4 +247,3 @@ override_whitelisted_methods = {
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-
