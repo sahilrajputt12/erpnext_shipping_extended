@@ -30,6 +30,33 @@ def _get_shiprocket_provider():
 		return None
 
 
+def _merge_extended_provider_data(doc, incoming_data):
+	try:
+		existing = json.loads(getattr(doc, "extended_provider_data", None) or "{}")
+	except Exception:
+		existing = {}
+
+	if not isinstance(existing, dict):
+		existing = {}
+
+	if isinstance(incoming_data, str):
+		try:
+			incoming_data = json.loads(incoming_data)
+		except Exception:
+			incoming_data = {}
+
+	if not isinstance(incoming_data, dict):
+		incoming_data = {}
+
+	for provider_key, payload in incoming_data.items():
+		if isinstance(payload, dict) and isinstance(existing.get(provider_key), dict):
+			existing[provider_key].update(payload)
+		else:
+			existing[provider_key] = payload
+
+	return frappe.as_json(existing)
+
+
 @frappe.whitelist()
 def fetch_shipping_rates(
 	pickup_from_type,
@@ -91,8 +118,8 @@ def fetch_shipping_rates(
 		provider = _get_shiprocket_provider()
 		if provider:
 			shiprocket_rates = provider.fetch_shipping_rates(shipment_doc=shipment_doc) or []
-	except Exception:
-		frappe.log_error(title="Shiprocket Rate Fetch Failed")
+	except Exception as e:
+		frappe.log_error(message=str(e), title="Shiprocket Rate Fetch Failed")
 		shiprocket_rates = []
 
 	# Keep rate dict shape consistent with `erpnext_shipping` so preferred-service logic works.
@@ -188,7 +215,9 @@ def create_shipment(
 				"awb_number": shipment_info.get("awb_number"),
 				"shiprocket_shipment_id": shipment_info.get("shiprocket_shipment_id"),
 				"shiprocket_order_id": shipment_info.get("shiprocket_order_id"),
-				"extended_provider_data": frappe.as_json(shipment_info.get("extended_provider_data") or {}),
+				"extended_provider_data": _merge_extended_provider_data(
+					shipment_doc, shipment_info.get("extended_provider_data")
+				),
 				"status": shipment_info.get("status") or "Booked",
 			}
 		)
@@ -256,7 +285,9 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 				"tracking_status": tracking.get("tracking_status"),
 				"tracking_status_info": tracking.get("tracking_status_info"),
 				"tracking_url": tracking.get("tracking_url"),
-				"extended_provider_data": frappe.as_json(tracking.get("extended_provider_data") or {}),
+				"extended_provider_data": _merge_extended_provider_data(
+					shipment_doc, tracking.get("extended_provider_data")
+				),
 			}
 		)
 	except Exception:
@@ -266,27 +297,50 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 
 def on_shipment_cancel(doc, method):
 	"""Handle shipment cancellation - cancel on Shiprocket too"""
-	# Only handle Shiprocket shipments
 	if doc.service_provider != "Shiprocket":
+		return
+
+	if not doc.shiprocket_order_id:
+		frappe.logger().info(f"Shipment {doc.name} cancelled locally (no Shiprocket order)")
+		return
+
+	current_statuses = {
+		str(getattr(doc, "status", "") or "").strip().lower(),
+		str(getattr(doc, "tracking_status", "") or "").strip().lower(),
+	}
+	if "delivered" in current_statuses:
+		frappe.msgprint(
+			_("Shipment is already delivered. Cannot cancel on Shiprocket."),
+			alert=True,
+			indicator="orange",
+		)
 		return
 	
 	try:
 		provider = _get_shiprocket_provider()
-		if provider and hasattr(provider, 'cancel_shipment'):
+		if provider and hasattr(provider, "cancel_shipment"):
 			frappe.msgprint(_("Cancelling shipment on {0}...").format(doc.service_provider))
 			result = provider.cancel_shipment(shipment_doc=doc)
+
+			if result and result.get("extended_provider_data"):
+				doc.db_set(
+					"extended_provider_data",
+					_merge_extended_provider_data(doc, result.get("extended_provider_data")),
+				)
 			
 			if result and result.get("status") == "success":
 				frappe.msgprint(
 					_("✓ Shipment cancelled on {0}").format(doc.service_provider),
 					alert=True,
-					indicator='green'
+					indicator="green"
 				)
 			else:
 				frappe.msgprint(
-					_("Unable to cancel on {0}. Please cancel manually in their portal.").format(doc.service_provider),
+					_("Unable to cancel on {0}. It may already be cancelled or in transit.").format(
+						doc.service_provider
+					),
 					alert=True,
-					indicator='orange'
+					indicator="orange"
 				)
 	except Exception as e:
 		frappe.log_error(
@@ -294,7 +348,7 @@ def on_shipment_cancel(doc, method):
 			title=f"{doc.service_provider} Cancel Failed"
 		)
 		frappe.msgprint(
-			_("Error cancelling on {0}: {1}").format(doc.service_provider, str(e)),
+			_("Shipment cancelled locally. Failed to notify {0}: {1}").format(doc.service_provider, str(e)),
 			alert=True,
-			indicator='red'
+			indicator="orange"
 		)

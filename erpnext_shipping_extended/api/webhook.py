@@ -62,8 +62,7 @@ def shiprocket_webhook():
 		if getattr(frappe.local, "request", None) and frappe.local.request.method == "GET":
 			return {"status": "ok", "message": "Shiprocket webhook endpoint is active"}
 
-		# Get raw request data
-		data = frappe.local.form_dict
+		data = _get_webhook_payload()
 		
 		# Log incoming webhook (for debugging)
 		if frappe.conf.get("log_shiprocket_webhooks"):
@@ -72,11 +71,7 @@ def shiprocket_webhook():
 				title="Shiprocket Webhook Received"
 			)
 		
-		# Verify webhook authenticity
-		# Temporary bypass for testing - remove in production
-		if frappe.conf.get("developer_mode") or frappe.local.request_ip in ["127.0.0.1", "::1"]:
-			frappe.logger().info("Webhook bypassed for local testing")
-		elif not _verify_webhook_signature_or_token():
+		if not _verify_webhook_signature_or_token():
 			frappe.log_error(
 				message="Signature verification failed",
 				title="Shiprocket Webhook: Unauthorized"
@@ -122,45 +117,54 @@ def tracking_webhook():
 	return shiprocket_webhook()
 
 
+def _get_webhook_payload():
+	request = getattr(frappe.local, "request", None)
+	if request:
+		try:
+			payload = request.get_json(silent=True)
+			if isinstance(payload, dict):
+				return payload
+		except Exception:
+			pass
+
+	form_dict = getattr(frappe.local, "form_dict", None) or {}
+	try:
+		return form_dict.copy()
+	except Exception:
+		return dict(form_dict)
+
+
 def _verify_webhook_signature_or_token():
 	"""
-	Verify webhook signature (if Shiprocket provides one)
-	Falls back to IP whitelist only when explicitly allowed
+	Verify webhook signature or shared secret token.
+	In developer mode, only localhost requests are allowed without signature checks.
 	"""
+	if frappe.conf.get("developer_mode"):
+		return _verify_ip_whitelist()
+
 	settings = frappe.get_single("Shiprocket Settings")
 	webhook_secret = settings.get_password("webhook_secret") if getattr(settings, "webhook_secret", None) else None
 	api_key = settings.get_password("webhook_api_key") if getattr(settings, "webhook_api_key", None) else None
-	signature_required = bool(getattr(settings, "enable_webhook_signature", 1))
-	allow_insecure_fallback = bool(getattr(settings, "allow_insecure_webhook_fallback", 0))
 	allow_api_key_auth = bool(getattr(settings, "enable_webhook_api_key", 0))
 
-	# Optionally accept x-api-key as a simple shared-secret auth.
 	if allow_api_key_auth and api_key:
 		received_key = frappe.get_request_header("x-api-key") or frappe.get_request_header("X-Api-Key")
 		if received_key and hmac.compare_digest(str(received_key), str(api_key)):
 			return True
 
-	if signature_required and not webhook_secret:
-		frappe.logger().warning("Shiprocket webhook rejected because webhook signature verification is enabled but no secret is configured")
-		return False
-
-	if not signature_required:
-		return _verify_ip_whitelist() if allow_insecure_fallback else False
-
 	if not webhook_secret:
-		return _verify_ip_whitelist() if allow_insecure_fallback else False
+		frappe.logger().error("Shiprocket webhook rejected: webhook secret is not configured")
+		return False
 	
 	signature = frappe.get_request_header("X-Shiprocket-Signature") or \
 	            frappe.get_request_header("X-Webhook-Signature")
 	
 	if not signature:
-		frappe.logger().warning("Webhook signature missing in request")
-		return _verify_ip_whitelist() if allow_insecure_fallback else False
+		frappe.logger().error("Shiprocket webhook rejected: missing signature")
+		return False
 	
-	# Get raw request body
 	raw_body = frappe.request.get_data(as_text=True)
 	
-	# Calculate expected signature
 	expected_signature = hmac.new(
 		webhook_secret.encode(),
 		raw_body.encode(),
@@ -171,35 +175,20 @@ def _verify_webhook_signature_or_token():
 	if hmac.compare_digest(signature, expected_signature):
 		return True
 	
-	frappe.logger().warning(f"Webhook signature mismatch. Expected: {expected_signature}, Got: {signature}")
+	frappe.logger().error("Shiprocket webhook rejected: invalid signature")
 	return False
 
 
 def _verify_ip_whitelist():
 	"""
-	Verify request is from Shiprocket's IP range
-	Only intended as an explicitly enabled temporary fallback.
+	Allow only localhost requests for local development and testing.
 	"""
 	client_ip = frappe.local.request_ip
-	
-	# Placeholder ranges for controlled environments only.
-	allowed_ips = [
-		"127.0.0.1",  # Localhost for testing
-		"::1",  # IPv6 localhost
-	]
-	
-	# In development mode, allow all
-	if frappe.conf.get("developer_mode"):
+	if client_ip in {"127.0.0.1", "::1"}:
+		frappe.logger().info("Shiprocket webhook accepted from localhost in developer mode")
 		return True
-	
-	# Check if IP is in whitelist
-	# For production, implement proper IP range checking
-	# This is a simple string match for now
-	for allowed_ip in allowed_ips:
-		if client_ip.startswith(allowed_ip.split("/")[0].rsplit(".", 1)[0]):
-			return True
-	
-	frappe.logger().warning(f"Webhook request from unauthorized IP: {client_ip}")
+
+	frappe.logger().error(f"Shiprocket webhook rejected: developer mode only allows localhost (got {client_ip})")
 	return False
 
 
