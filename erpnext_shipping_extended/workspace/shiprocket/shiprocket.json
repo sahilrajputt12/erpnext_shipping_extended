@@ -1,0 +1,249 @@
+{
+ "app": "erpnext_shipping_extended",
+ "cards_label": "ShipRocket",
+ "charts": [
+  {
+   "chart_name": "Shipment Status Overview",
+   "label": "Shipment Status Overview"
+  },
+  {
+   "chart_name": "Courier Performance",
+   "label": "Courier Performance"
+  },
+  {
+   "chart_name": "Monthly Shipment Trends",
+   "label": "Monthly Shipment Trends"
+  }
+ ],
+ "content": "[{\"id\":\"shiprocket_cards\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>ShipRocket Overview</b></span>\",\"col\":12}},{\"id\":\"shiprocket_chart_1\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Shipment Status Overview\",\"col\":6}},{\"id\":\"shiprocket_chart_2\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Courier Performance\",\"col\":6}},{\"id\":\"shiprocket_chart_3\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Monthly Shipment Trends\",\"col\":12}},{\"id\":\"shiprocket_spacer_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"shiprocket_shortcuts_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Actions</b></span>\",\"col\":12}},{\"id\":\"shiprocket_shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shipment\",\"col\":3}},{\"id\":\"shiprocket_shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shiprocket Settings\",\"col\":3}},{\"id\":\"shiprocket_shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Delivery Note\",\"col\":3}},{\"id\":\"shiprocket_shortcut_4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"ShipRocket Dashboard\",\"col\":3}},{\"id\":\"shiprocket_spacer_2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"shiprocket_links_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Operations & Configuration</b></span>\",\"col\":12}},{\"id\":\"shiprocket_card_1\",\"type\":\"card\",\"data\":{\"card_name\":\"Shipment Management\",\"col\":4}},{\"id\":\"shiprocket_card_2\",\"type\":\"card\",\"data\":{\"card_name\":\"Shipping Operations\",\"col\":4}},{\"id\":\"shiprocket_card_3\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}},{\"id\":\"shiprocket_spacer_3\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"shiprocket_ql_header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Lists</b></span>\",\"col\":12}},{\"id\":\"shiprocket_quick_list_1\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Booked Shipments\",\"col\":6}},{\"id\":\"shiprocket_quick_list_2\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Delivered Shipments\",\"col\":6}}]",
+ "creation": "2026-03-30 10:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "truck",
+ "idx": 0,
+ "indicator_color": "blue",
+ "is_hidden": 0,
+ "label": "ShipRocket",
+ "links": [
+  {
+   "description": "Create and manage shipment records.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipment Management",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "description": "Create and manage shipments.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipment",
+   "link_count": 0,
+   "link_to": "Shipment",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "description": "Prepare source delivery notes for shipment booking.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Delivery Note",
+   "link_count": 0,
+   "link_to": "Delivery Note",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Maintain available carrier service mappings.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Parcel Service Type",
+   "link_count": 0,
+   "link_to": "Parcel Service Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Review live shipment progress and exceptions.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipping Operations",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "description": "Open all booked shipments currently being processed.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Booked Shipments",
+   "link_count": 0,
+   "link_to": "Shipment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Open shipments currently in transit.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "In Transit Shipments",
+   "link_count": 0,
+   "link_to": "Shipment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Review delivered shipments.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Delivered Shipments",
+   "link_count": 0,
+   "link_to": "Shipment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Configure ShipRocket and shipping masters.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Configuration",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "description": "Configure ShipRocket credentials and webhook options.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shiprocket Settings",
+   "link_count": 0,
+   "link_to": "Shiprocket Settings",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "description": "Manage parcel size templates used for shipments.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipment Parcel Template",
+   "link_count": 0,
+   "link_to": "Shipment Parcel Template",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "Review shipping rule setup.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipping Rule",
+   "link_count": 0,
+   "link_to": "Shipping Rule",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "description": "View parcel carriers synced with ERPNext Shipping.",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Parcel Service",
+   "link_count": 0,
+   "link_to": "Parcel Service",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-03-30 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping Extended",
+ "name": "ShipRocket",
+ "number_cards": [
+  {
+   "label": "Active Shipments",
+   "number_card_name": "Active Shipments"
+  },
+  {
+   "label": "Delivered Today",
+   "number_card_name": "Delivered Today"
+  },
+  {
+   "label": "In Transit",
+   "number_card_name": "In Transit"
+  },
+  {
+   "label": "Exception Shipments",
+   "number_card_name": "Exception Shipments"
+  },
+  {
+   "label": "Total Shipping Cost",
+   "number_card_name": "Total Shipping Cost"
+  },
+  {
+   "label": "Pending Delivery Notes",
+   "number_card_name": "Pending Delivery Notes"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "Shipment",
+   "label": "Booked Shipments",
+   "quick_list_filter": "[[\"Shipment\",\"docstatus\",\"=\",1,false],[\"Shipment\",\"status\",\"=\",\"Booked\",false]]"
+  },
+  {
+   "document_type": "Shipment",
+   "label": "Delivered Shipments",
+   "quick_list_filter": "[[\"Shipment\",\"docstatus\",\"=\",1,false],[\"Shipment\",\"tracking_status\",\"=\",\"Delivered\",false]]"
+  }
+ ],
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 20.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "format": "{} Active",
+   "label": "Shipment",
+   "link_to": "Shipment",
+   "stats_filter": "{\"docstatus\":1,\"status\":\"Booked\"}",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "format": "{} Ready",
+   "label": "Shiprocket Settings",
+   "link_to": "Shiprocket Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "format": "{} To Bill",
+   "label": "Delivery Note",
+   "link_to": "Delivery Note",
+   "stats_filter": "{\"docstatus\":1,\"status\":\"To Bill\"}",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "label": "ShipRocket Dashboard",
+   "link_to": "ShipRocket",
+   "type": "Dashboard"
+  }
+ ],
+ "title": "ShipRocket"
+}

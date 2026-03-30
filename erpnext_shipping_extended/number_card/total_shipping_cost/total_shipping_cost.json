@@ -1,0 +1,20 @@
+{
+ "aggregate_function_based_on": "shipment_amount",
+ "creation": "2026-03-30 10:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "document_type": "Shipment",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[[\"Shipment\",\"docstatus\",\"=\",1,false]]",
+ "function": "Sum",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Total Shipping Cost",
+ "module": "ERPNext Shipping Extended",
+ "name": "Total Shipping Cost",
+ "owner": "Administrator",
+ "show_percentage_stats": 1,
+ "stats_time_interval": "Monthly",
+ "type": "Document Type"
+}

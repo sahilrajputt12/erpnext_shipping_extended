@@ -9,5 +9,10 @@ def after_install():
 		from erpnext_shipping_extended.patches.v1_0.add_custom_fields import execute
 
 		execute()
+		from erpnext_shipping_extended.setup.install_shiprocket_workspace_dashboard import (
+			execute as install_shiprocket_workspace_dashboard,
+		)
+
+		install_shiprocket_workspace_dashboard()
 	except Exception:
 		frappe.log_error(title="ERPNext Shipping Extended: after_install failed")
